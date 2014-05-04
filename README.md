@@ -1,16 +1,14 @@
-HZSpatial
-=========
-
-Truly Spatially Enabling Very Large In-Memory Databases - Apache Hazelcast
+## Abstract
+This project consists of a set of modules and patches to index spatially typed fields such as points,lines and polygons in [Apache Halzecast](http://www.hazelcast.org/) maps.
+In addition, the advent of the [MapReduce](http://research.google.com/archive/mapreduce-osdi04.pdf) API **in** Hazelcast (GREAT Job guys) enables applications to push logic onto the edge nodes to operate on the "local" data. An example will be shown later on how the spatial index is used in a MapReduce application for hotspot visualization.
 
 ## Description
-This project consists of a set of modules and patches to spatially enable [Apache Halzecast](http://www.hazelcast.org/). In addition, the advent of the [MapReduce](http://research.google.com/archive/mapreduce-osdi04.pdf) API, enables us push logic to the data nodes to operate on "local" data.
+Like all other stores, Hazelcast relies on field indexing to quickly retrieve elements from its in-memory nodes. Due to the native lexicographical order of the index, applications encode in [geohash](http://en.wikipedia.org/wiki/Geohash) spatial elements for storage and searching. Though this encoding is very smart _and_ relies on the native index capabilities, range searches have to take into account <a href="http://en.wikipedia.org/wiki/Z-order_(curve)">Z-order</a> boundary conditions, and saving non-point features such as large polygons can significantly increase the storage indexing.
 
-Like all other key-value stores, Hazelcast relies on key indexing to quickly retrieve elements from its in-memory store. Again, like other stores with non-native spatial capabilities, they rely on the native lexicographical order of the index with [geohash](http://en.wikipedia.org/wiki/Geohash) encoding to store and search spatial elements. Though this encoding is very smart to rely on the native index capabilities, range searches have to take into account [z-order](http://en.wikipedia.org/wiki/Z-order_(curve)) boundary conditions, and storing non-point features can significantly increase the storage indexing.
+The solution is to introduce a **native** non-lexicographical index order, in such a way that a true spatial indexing can be used when storing and querying spatial elements. One such indexing is the [QuadTree](http://en.wikipedia.org/wiki/Quadtree) and an implementation can be found in the [Esri Geometry API](https://github.com/Esri/geometry-api-java).
 
-The solution is to introduce a **native** non-lexicographical index order, in such a way that spatial indexing can be used when storing and querying spatial elements. One such indexing is the [QuadTree](http://en.wikipedia.org/wiki/Quadtree) and an implementation can be found in the [Esri Geometry API](https://github.com/Esri/geometry-api-java).
-
-As of this writing, Hazelcast has a hardcoded definition of an index on a collection. Luckily, the ```Index``` is a public interface and just the definition is set to a concrete implementation ```IndexImpl```. This [patch]() minimally modifies the ```IndexService``` class, **without** breaking any of the existing unit tests. It relies on *convention vs. configuration* to define a custom index on a ```<map/>``` field declaration.
+As of this writing, Hazelcast has a hardcoded definition of an index on a collection. Luckily, the ```Index``` is a public interface and just the definition is set to a concrete implementation ```IndexImpl```. This [patch](https://github.com/mraad/HZSpatial/blob/master/create_user_defined_index_on_a_map1.patch) minimally modifies the ```IndexService``` class.
+It relies on *convention vs. configuration* to define a custom index on a ```IMap``` field index declaration.
 
 Here is an example in an XML configuration:
 
@@ -23,14 +21,18 @@ Here is an example in an XML configuration:
 </map>
 ```
 
-Note the ```@``` sign after the map field name index declaration, followed by a fully qualified class name, then with a set values as arguments in between braces ```[]```.
+Note the ```@``` sign after the map field name index declaration, followed by a fully qualified class name, then with a set values as arguments in between the braces ```[]```.
 
-In the above example, the ```geomap``` map elements have a field named ```point```, that is indexed with an instance of ```com.esri.SpatialIndex``` that is constructed with the string ```-180,-90,180,90,16```.  The first 4 elements in the string are quad tree full extent, and the last element is the depth of the tree.
+In the above example, the ```geomap``` map elements have a field named ```point```, that is indexed with an instance of ```com.esri.SpatialIndex``` who is constructed with the string ```-180,-90,180,90,16```.
+Inside ```SpatialIndex```, the string is tokenized based on the comma character, in such that the first 4 tokens are the QuadTree full extent, and the last token is the tree depth.
 
 ## Implementation and Usage
 
-The ```SpatialIndex``` has a ```QuadTree``` instance to store and search spatial values by their ```Envelope2D``` references.  However, spatial operations (i.e. contains, intersects, crosses, etc..) rely the true ```Geometry``` reference. So an interface is defined be implemented by map elements, in such that they can be identified when added to an ```IMap```.
+The ```SpatialIndex``` has a ```QuadTree``` instance to store and search spatial values by their ```Envelope2D``` reference.
+However, spatial operations (i.e. contains, intersects, crosses, etc..) rely on the true ```Geometry``` reference.
+So an interface is defined to be implemented by map elements, in such that they can be identified when added to an ```IMap```.
 
+**Note to the Hazelcast folks:** This is done **outside** of Hazelcast :-)
 
 ```
 public interface SpatialValue
@@ -40,16 +42,17 @@ public interface SpatialValue
 }
 ```
 
-The Hazelcast API can be used can be used as normal:
+The Hazelcast API can _still_ be used normally:
 
 ```
 Config config = new Config();
 HazelcastInstance h = Hazelcast.newHazelcastInstance(config);
-IMap<Integer,SpatialValue> map = h.getMap("geomap");
+IMap<Integer,SpatialValueImpl> map = h.getMap("geomap");
 map.put(0, new SpatialValueImpl(new Point(lon,lat)));
 ```
 
-To find and filter elements from a map, the ```find``` method is invoked with an instance of ```Predicate```. Hazelcast comes with a set of built-in in lexicographical predicates, to take advantage of the new spatial index, a set of spatial predicates have to be used.
+To search and filter elements from a map, the ```find``` method is invoked with an instance of ```Predicate```.
+Hazelcast comes with a set of built-in lexicographical predicates, to take advantage of the new spatial index, a set of spatial predicates have to be used.
 
 A ```SpatialPredicate``` interface is introduced:
 
@@ -61,10 +64,12 @@ public interface SpatialPredicate extends Comparable<Geometry>
 }
 ```
 
-The envelope of the predicate is used by the quad tree to home onto the area of interest, and the predicate function is used to filter the spatial values based on their true geometries.
+The envelope of the predicate is used by the quad tree to home onto an area of interest, and the ```predicates``` function is used to filter the spatial values based on their true geometries.
 
 
 ## Patch and Build Hazelcast
+
+The following patches introduces dynamic indexing to ```IndexService.java```, and lets ```MapCombineTask.java``` set a Hazelcast instance on a ```Mapper``` implementation.
 
 ```
 git clone https://github.com/hazelcast/hazelcast.git
@@ -76,22 +81,25 @@ mvn -DskipTests install
 
 ## Build and Install
 
-After clone the project:
+This project depends on the [Esri Geometry API](https://github.com/Esri/geometry-api-java) and my [Shapefile](https://github.com/mraad/Shapefile) library.
+Make sure to clone and mvn install them in that order before proceeding.
 
 ```
+git clone https://github.com/mraad/HZSpatial.git
+cd HZSpatial
 mvn install
 ```
 
-This will create a library that is linked into two submodules ```HZServer``` and ```HZClient```.
+This will create a library ```HZLib.jar``` that is linked into the two submodules ```HZServer``` and ```HZClient```.
 
-### Start the server
+### Start the hazelcast server
 
 ```
 cd HZServer
 ./start-all.sh
 ```
 
-### Stop the server
+### Stop the hazelcast server
 
 ```
 cd HZServer
@@ -100,7 +108,9 @@ cd HZServer
 
 ### Loading and finding data
 
-Download the [Armed Conflict Location and Event Data](http://www.acleddata.com/) for Africa [shapefile](http://www.acleddata.com/wp-content/uploads/2014/large-docs/ACLED_All_Africa_1997-2013.zip). Unzip the file into a folder and define an environment variable ```ACLED_HOME``` that points to that folder. There are about 86,000 features in the shapefile with time, latitude, longitude and other attributes.
+Download the [Armed Conflict Location and Event Data](http://www.acleddata.com/) for Africa [shapefile](http://www.acleddata.com/wp-content/uploads/2014/large-docs/ACLED_All_Africa_1997-2013.zip).
+Unzip the file into a folder and define an environment variable named ```ACLED_HOME``` that points to that folder.
+This is a tiny set with about 86,000 features in the shapefile with time, latitude, longitude and other attributes.
 
 ```
 cd HZClient
@@ -118,20 +128,23 @@ If you look at the content of the script, it searches an area around Algeria and
 ## Bring Program To Data
 
 The latest version of Hazelcast introduces a MapReduce API. A user implements the ```Mapper``` and ```Reduce``` interfaces and submits them as part of ```Job``` to be executed on each "datanode".
+As an example implementation, we will execute a density analysis based on set of polygons in a [honeycomb lattice](http://en.wikipedia.org/wiki/Honeycomb_lattice) format.
+The density of each cell is the number of conflicts it covers geographically.
+In a MapReduce paradigm, the mapper iterates over each conflict and finds spatially the cell id that it is covered by and emits that cell id.
+The reducer operates on each cell id and sums the associated emitted values.
+The result is a list of cell id and count by cell.
+This is the ubiquitous spatial Hello World in MapReduce :-)
 
-As an example implementation, we will execute a density analysis based on set of polygons in a [honeycomb lattice](http://en.wikipedia.org/wiki/Honeycomb_lattice) format.  The density of each cell is the number of conflicts it covers geographically.
+### Loading the cell data
 
-In a MapReduce paradigm, the mapper iterates over each conflicts and find spatially the cell id that it covered by and emits that cell id.  The reducer operates on each cell id and sums the associated emitted values.  The result is a list of cell id and count by cell.
-
-### Load the cell data
+The ```data``` folder contains a [Shapefile](http://en.wikipedia.org/wiki/Shapefile) with polygon features in honeycomb format, where each honeycomb cell width is about one geographical degree.
 
 ```
 cd HZClient
 ./mvn-polygons
 ```
 
-This loads the cell polygons in shape file format in the data folder into a spatially enabled Hazelcast map.
-
+This loads the cell polygons into a spatially enabled Hazelcast map.
 
 ### Executing MapReduce
 
@@ -139,9 +152,9 @@ This loads the cell polygons in shape file format in the data folder into a spat
 mvn exec:java -Dexec.mainClass=com.esri.Main -Dexec.args="mr density.csv"
 ```
 
-I had to patch Hazelcast to introspect ```Mapper``` instances for the ```HazelcastInstanceAware``` interface,  in such that it can reference other maps for example.
+As mentioned previously, we had to patch Hazelcast to introspect ```Mapper``` instances for the ```HazelcastInstanceAware``` interface,  in such that it can reference other maps for example.
 
-_Hazelcast Folks: If you are reading this, please tell me if there is a way to do this without the patch - thanks in advance._
+**Note to Hazelcast Folks:** Please tell me if there is a way to do this _without_ the patch - thanks in advance.
 
 In the above example, the ```density.csv``` file will have the following format:
 
@@ -151,6 +164,6 @@ In the above example, the ```density.csv``` file will have the following format:
 |   ...|       ...|
 
 
-The data can be imported into ArcMap for visualization:
+The CSV file can be imported into ArcMap, where it is joined with the imported cell polygon shapefile and symbolized for visualization:
 
 ![ACLED](https://dl.dropboxusercontent.com/u/2193160/ACLED.png)
