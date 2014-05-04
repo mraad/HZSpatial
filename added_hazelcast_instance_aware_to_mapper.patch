@@ -1,0 +1,25 @@
+Index: hazelcast/src/main/java/com/hazelcast/mapreduce/impl/task/MapCombineTask.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- hazelcast/src/main/java/com/hazelcast/mapreduce/impl/task/MapCombineTask.java	(revision 870f2f3d6dbfb99f7c3e21fa25a604cb2f0dd865)
++++ hazelcast/src/main/java/com/hazelcast/mapreduce/impl/task/MapCombineTask.java	(revision )
+@@ -16,6 +16,7 @@
+ 
+ package com.hazelcast.mapreduce.impl.task;
+ 
++import com.hazelcast.core.HazelcastInstanceAware;
+ import com.hazelcast.mapreduce.KeyValueSource;
+ import com.hazelcast.mapreduce.LifecycleMapper;
+ import com.hazelcast.mapreduce.Mapper;
+@@ -119,6 +120,9 @@
+ 
+         context.setPartitionId(partitionId);
+ 
++        if (mapper instanceof HazelcastInstanceAware){
++            ((HazelcastInstanceAware) mapper).setHazelcastInstance(nodeEngine.getHazelcastInstance());
++        }
+         if (mapper instanceof LifecycleMapper) {
+             ((LifecycleMapper) mapper).initialize(context);
+         }

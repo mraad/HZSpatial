@@ -1,0 +1,49 @@
+Index: hazelcast/src/main/java/com/hazelcast/query/impl/IndexService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- hazelcast/src/main/java/com/hazelcast/query/impl/IndexService.java	(revision 870f2f3d6dbfb99f7c3e21fa25a604cb2f0dd865)
++++ hazelcast/src/main/java/com/hazelcast/query/impl/IndexService.java	(revision )
+@@ -20,12 +20,14 @@
+ import com.hazelcast.query.IndexAwarePredicate;
+ import com.hazelcast.query.Predicate;
+ 
++import java.lang.reflect.Constructor;
+ import java.util.Set;
+ import java.util.concurrent.ConcurrentHashMap;
+ import java.util.concurrent.ConcurrentMap;
+ import java.util.concurrent.atomic.AtomicReference;
+ 
+ public class IndexService {
++
+     private final ConcurrentMap<String, Index> mapIndexes = new ConcurrentHashMap<String, Index>(3);
+     private final AtomicReference<Index[]> indexes = new AtomicReference<Index[]>();
+     private volatile boolean hasIndex;
+@@ -39,7 +41,25 @@
+         if (index != null) {
+             return index;
+         }
++        // Check if in the form attribute@fully.qualified.className[properties]
++        final int indexOfAt = attribute.indexOf("@");
++        if (indexOfAt != -1) {
++            final String line = attribute;
++            attribute = line.substring(0, indexOfAt);
++            try {
++                final int indexOfOpen = line.indexOf('[');
++                final int indexOfClose = line.lastIndexOf(']');
++                final String className = line.substring(indexOfAt + 1, indexOfOpen);
++                final String properties = line.substring(indexOfOpen + 1, indexOfClose);
++                final Class<Index> clazz = (Class<Index>) Class.forName(className);
++                final Constructor<Index> constructor = clazz.getConstructor(String.class, boolean.class, String.class);
++                index = constructor.newInstance(attribute, ordered, properties);
++            } catch (Throwable t) {
++                throw new RuntimeException(t);
++            }
++        } else {
+-        index = new IndexImpl(attribute, ordered);
++            index = new IndexImpl(attribute, ordered);
++        }
+         mapIndexes.put(attribute, index);
+         Object[] indexObjects = mapIndexes.values().toArray();
+         Index[] newIndexes = new Index[indexObjects.length];
