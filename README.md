@@ -28,6 +28,8 @@ Inside ```SpatialIndex```, the string is tokenized based on the comma character,
 
 ## Implementation and Usage
 
+**NOTE: This code is NOT production ready yet, the spatial index implementation is a ReadOnly implementation**
+
 The ```SpatialIndex``` has a ```QuadTree``` instance to store and search spatial values by their ```Envelope2D``` reference.
 However, spatial operations (i.e. contains, intersects, crosses, etc..) rely on the true ```Geometry``` reference.
 So an interface is defined to be implemented by map elements, in such that they can be identified when added to an ```IMap```.
