@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hazelcast xsi:schemaLocation="http://www.hazelcast.com/schema/config hazelcast-config-3.2.xsd"
+           xmlns="http://www.hazelcast.com/schema/config"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+    <executor-service name="default">
+        <pool-size>16</pool-size>
+        <queue-capacity>0</queue-capacity>
+    </executor-service>
+
+    <map name="geomap">
+        <in-memory-format>OBJECT</in-memory-format>
+        <statistics-enabled>false</statistics-enabled>
+        <backup-count>0</backup-count>
+        <async-backup-count>0</async-backup-count>
+        <time-to-live-seconds>0</time-to-live-seconds>
+        <max-idle-seconds>0</max-idle-seconds>
+        <eviction-policy>NONE</eviction-policy>
+        <max-size policy="PER_NODE">2147483647</max-size>
+        <merge-policy>com.hazelcast.map.merge.PutIfAbsentMapMergePolicy</merge-policy>
+        <read-backup-data>false</read-backup-data>
+        <indexes>
+            <index ordered="true">point@com.esri.SpatialIndex[-180,-90,180,90,16]</index>
+        </indexes>
+    </map>
+
+    <map name="hexmap">
+        <in-memory-format>OBJECT</in-memory-format>
+        <statistics-enabled>false</statistics-enabled>
+        <backup-count>0</backup-count>
+        <async-backup-count>0</async-backup-count>
+        <time-to-live-seconds>0</time-to-live-seconds>
+        <max-idle-seconds>0</max-idle-seconds>
+        <eviction-policy>NONE</eviction-policy>
+        <max-size policy="PER_NODE">2147483647</max-size>
+        <merge-policy>com.hazelcast.map.merge.PutIfAbsentMapMergePolicy</merge-policy>
+        <read-backup-data>false</read-backup-data>
+        <indexes>
+            <index ordered="true">polygon@com.esri.SpatialIndex[-180,-90,180,90,16]</index>
+        </indexes>
+    </map>
+
+    <jobtracker name="default">
+        <max-thread-size>0</max-thread-size>
+        <queue-size>0</queue-size>
+        <retry-count>0</retry-count>
+        <chunk-size>500000</chunk-size>
+        <communicate-stats>false</communicate-stats>
+        <topology-changed-strategy>CANCEL_RUNNING_OPERATION</topology-changed-strategy>
+    </jobtracker>
+
+</hazelcast>
