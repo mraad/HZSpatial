@@ -1,5 +1,5 @@
 ## Abstract
-This project consists of a set of modules and patches to index spatially typed fields such as points,lines and polygons in [Apache Halzecast](http://www.hazelcast.org/) maps.
+This project consists of a set of modules and patches to index spatially typed fields such as points,lines and polygons in [Halzecast](http://www.hazelcast.org/) maps.
 In addition, the advent of the [MapReduce](http://research.google.com/archive/mapreduce-osdi04.pdf) API **in** Hazelcast (GREAT Job guys) enables applications to push logic onto the edge nodes to operate on the "local" data. An example will be shown later on how the spatial index is used in a MapReduce application for hotspot visualization.
 
 ## Description
